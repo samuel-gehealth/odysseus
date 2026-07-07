@@ -4,12 +4,24 @@
 # the final image / Cookbook never has to compile the broken sdists. See
 # docker/build-realesrgan-wheels.sh for the full rationale.
 FROM python:3.14-slim AS realesrgan-wheels
+# Use Chinese mirrors for GE network compatibility
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
+ENV PIP_INDEX_URL=http://mirrors.aliyun.com/pypi/simple/
+ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 COPY docker/build-realesrgan-wheels.sh /usr/local/bin/build-realesrgan-wheels.sh
+# Patch script to use Chinese PyPI mirror instead of pypi.org
+RUN sed -i 's|https://pypi.org|http://mirrors.aliyun.com/pypi|g' /usr/local/bin/build-realesrgan-wheels.sh
 RUN bash /usr/local/bin/build-realesrgan-wheels.sh /wheels
 
 FROM python:3.14-slim
+# Use Chinese apt mirrors (HTTP) for GE network compatibility
+ENV PIP_INDEX_URL=http://mirrors.aliyun.com/pypi/simple/
+ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
 
 # System deps. tmux is required by Cookbook for background downloads/serves.
 # openssh-client is required for Cookbook remote server tests, setup, probes,
@@ -61,7 +73,7 @@ RUN ARCH="$(dpkg --print-architecture)" \
          arm64) DARCH=aarch64 ;; \
          *) echo "unsupported arch $ARCH"; exit 1 ;; \
        esac \
-    && curl -fsSL "https://download.docker.com/linux/static/stable/${DARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
+    && curl -fsSL "http://mirrors.aliyun.com/docker-ce/linux/static/stable/${DARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
        -o /tmp/docker.tgz \
     && tar -xzf /tmp/docker.tgz -C /tmp \
     && install -m 0755 /tmp/docker/docker /usr/local/bin/docker \
@@ -73,6 +85,7 @@ WORKDIR /app
 # are opt-in so the default image stays MIT-core; see requirements-optional.txt.
 ARG INSTALL_OPTIONAL=false
 COPY requirements.txt requirements-optional.txt ./
+# Use Chinese PyPI mirror for GE network compatibility
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$INSTALL_OPTIONAL" = "true" ]; then pip install --no-cache-dir -r requirements-optional.txt; fi
 
